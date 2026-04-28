@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
       - name: jenkins-app
-        image: YOUR_DOCKER_USERNAME/jenkins-app:latest   # هتتغير تلقائي في pipeline
+        image: YOUR_DOCKER_USERNAME/jenkins-app:latest   # هتتغير تلقائي
         ports:
         - containerPort: 3000
 
