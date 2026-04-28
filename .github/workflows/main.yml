@@ -1,0 +1,111 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # -------------------
+    # 1. Install & Test
+    # -------------------
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run Unit Tests
+      run: npm test
+
+    # -------------------
+    # 2. Trivy Scan (Code)
+    # -------------------
+    - name: Run Trivy FS Scan
+      uses: aquasecurity/trivy-action@0.24.0
+      with:
+        scan-type: fs
+        scan-ref: .
+        format: table
+        exit-code: 1
+        severity: CRITICAL,HIGH
+
+    # -------------------
+    # 3. Build App
+    # -------------------
+    - name: Build App
+      run: npm run build
+
+    # -------------------
+    # 4. Docker Login
+    # -------------------
+    - name: Login to Docker Hub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    # -------------------
+    # 5. Build Image
+    # -------------------
+    - name: Build Docker Image
+      run: docker build -t ${{ secrets.DOCKER_USERNAME }}/jenkins-app:${{ github.sha }} .
+
+    # -------------------
+    # 6. Trivy Scan (Image)
+    # -------------------
+    - name: Run Trivy Image Scan
+      uses: aquasecurity/trivy-action@0.24.0
+      with:
+        image-ref: ${{ secrets.DOCKER_USERNAME }}/jenkins-app:${{ github.sha }}
+        format: table
+        exit-code: 1
+        severity: CRITICAL,HIGH
+
+    # -------------------
+    # 7. Push Image
+    # -------------------
+    - name: Push Docker Image
+      run: docker push ${{ secrets.DOCKER_USERNAME }}/jenkins-app:${{ github.sha }}
+
+    # -------------------
+    # 8. Remove local image
+    # -------------------
+    - name: Remove local image
+      run: docker rmi ${{ secrets.DOCKER_USERNAME }}/jenkins-app:${{ github.sha }}
+
+    # -------------------
+    # 9. Update deployment.yaml
+    # -------------------
+    - name: Update Kubernetes deployment file
+      run: |
+        sed -i 's|image: .*|image: ${{ secrets.DOCKER_USERNAME }}/jenkins-app:${{ github.sha }}|' deployment.yaml
+
+    # -------------------
+    # 10. K8s Config
+    # -------------------
+    - name: Set Kubeconfig
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+        export KUBECONFIG=$PWD/kubeconfig
+
+    # -------------------
+    # 11. Deploy
+    # -------------------
+    - name: Deploy to K8s
+      run: kubectl apply -f deployment.yaml
+
+    # -------------------
+    # Post Actions
+    # -------------------
+    - name: Always
+      if: always()
+      run: echo "Pipeline finished!"
+
+    - name: Success
+      if: success()
+      run: echo "Deployment successful "
+
+    - name: Failure
+      if: failure()
+      run: echo "Pipeline failed "
