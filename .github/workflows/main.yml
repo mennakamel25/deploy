@@ -19,98 +19,81 @@ jobs:
       uses: actions/checkout@v4
 
     # -------------------
-    # 2. Setup Node
+    # 2. Setup Java
     # -------------------
-    - name: Setup Node
-      uses: actions/setup-node@v4
+    - name: Set up JDK
+      uses: actions/setup-java@v4
       with:
-        node-version: 18
+        distribution: 'temurin'
+        java-version: '17'
+        cache: maven
 
     # -------------------
-    # 3. Install Dependencies (حل المشكلة)
+    # 3. Build & Test
     # -------------------
-    - name: Install dependencies
-      run: |
-        if [ -f package-lock.json ]; then
-          npm ci
-        else
-          npm install
-        fi
+    - name: Build with Maven
+      run: mvn clean install
 
     # -------------------
-    # 4. Run Tests
-    # -------------------
-    - name: Run Unit Tests
-      run: npm test
-
-    # -------------------
-    # 🔐 5. Trivy FS Scan
+    # 4. Trivy FS Scan
     # -------------------
     - name: Run Trivy FS Scan
       uses: aquasecurity/trivy-action@v0.20.0
       with:
         scan-type: fs
         scan-ref: .
-        format: table
-        exit-code: 1
         severity: CRITICAL,HIGH
+        exit-code: 1
 
     # -------------------
-    # 6. Build App
-    # -------------------
-    - name: Build App
-      run: npm run build
-
-    # -------------------
-    # 7. Docker Login
+    # 5. Docker Login
     # -------------------
     - name: Login to Docker Hub
       run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
     # -------------------
-    # 8. Build Image
+    # 6. Build Docker Image
     # -------------------
     - name: Build Docker Image
       run: docker build -t $IMAGE_NAME .
 
     # -------------------
-    # 🔐 9. Trivy Image Scan
+    # 7. Trivy Image Scan
     # -------------------
     - name: Run Trivy Image Scan
       uses: aquasecurity/trivy-action@v0.20.0
       with:
         image-ref: ${{ env.IMAGE_NAME }}
-        format: table
-        exit-code: 1
         severity: CRITICAL,HIGH
+        exit-code: 1
 
     # -------------------
-    # 10. Push Image
+    # 8. Push Image
     # -------------------
     - name: Push Docker Image
       run: docker push $IMAGE_NAME
 
     # -------------------
-    # 11. Remove local image
+    # 9. Remove local image
     # -------------------
     - name: Remove local image
       run: docker rmi $IMAGE_NAME
 
     # -------------------
-    # 12. Update deployment.yaml
+    # 10. Update deployment.yaml
     # -------------------
     - name: Update Kubernetes deployment file
       run: |
         sed -i 's|image: .*|image: '"$IMAGE_NAME"'|' deployment.yaml
 
     # -------------------
-    # 13. Install kubectl
+    # 11. Install kubectl
     # -------------------
     - name: Install kubectl
       uses: azure/setup-kubectl@v4
 
     # -------------------
-    # 14. Set kubeconfig
+    # 12. Set kubeconfig
     # -------------------
     - name: Set Kubeconfig
       run: |
@@ -118,7 +101,7 @@ jobs:
         echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
 
     # -------------------
-    # 15. Deploy to Kubernetes
+    # 13. Deploy
     # -------------------
     - name: Deploy to K8s
       run: kubectl apply -f deployment.yaml
@@ -132,8 +115,8 @@ jobs:
 
     - name: Success
       if: success()
-      run: echo "Deployment successful 🚀"
+      run: echo "Deployment successful "
 
     - name: Failure
       if: failure()
-      run: echo "Pipeline failed ❌"
+      run: echo "Pipeline failed "
