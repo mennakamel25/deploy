@@ -13,31 +13,38 @@ jobs:
 
     steps:
     # -------------------
-    # Checkout
+    # 1. Checkout
     # -------------------
     - name: Checkout Code
       uses: actions/checkout@v4
 
     # -------------------
-    # Setup Node (مهم)
+    # 2. Setup Node
     # -------------------
     - name: Setup Node
       uses: actions/setup-node@v4
       with:
         node-version: 18
-        cache: 'npm'
 
     # -------------------
-    # Install & Test
+    # 3. Install Dependencies (حل المشكلة)
     # -------------------
     - name: Install dependencies
-      run: npm ci
+      run: |
+        if [ -f package-lock.json ]; then
+          npm ci
+        else
+          npm install
+        fi
 
+    # -------------------
+    # 4. Run Tests
+    # -------------------
     - name: Run Unit Tests
       run: npm test
 
     # -------------------
-    # 🔐 Trivy FS Scan
+    # 🔐 5. Trivy FS Scan
     # -------------------
     - name: Run Trivy FS Scan
       uses: aquasecurity/trivy-action@v0.20.0
@@ -49,25 +56,25 @@ jobs:
         severity: CRITICAL,HIGH
 
     # -------------------
-    # Build App
+    # 6. Build App
     # -------------------
     - name: Build App
       run: npm run build
 
     # -------------------
-    # Docker Login
+    # 7. Docker Login
     # -------------------
     - name: Login to Docker Hub
       run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
     # -------------------
-    # Build Image
+    # 8. Build Image
     # -------------------
     - name: Build Docker Image
       run: docker build -t $IMAGE_NAME .
 
     # -------------------
-    # 🔐 Trivy Image Scan
+    # 🔐 9. Trivy Image Scan
     # -------------------
     - name: Run Trivy Image Scan
       uses: aquasecurity/trivy-action@v0.20.0
@@ -78,39 +85,40 @@ jobs:
         severity: CRITICAL,HIGH
 
     # -------------------
-    # Push Image
+    # 10. Push Image
     # -------------------
     - name: Push Docker Image
       run: docker push $IMAGE_NAME
 
     # -------------------
-    # Remove local image
+    # 11. Remove local image
     # -------------------
     - name: Remove local image
       run: docker rmi $IMAGE_NAME
 
     # -------------------
-    # Update deployment.yaml
+    # 12. Update deployment.yaml
     # -------------------
     - name: Update Kubernetes deployment file
       run: |
         sed -i 's|image: .*|image: '"$IMAGE_NAME"'|' deployment.yaml
 
     # -------------------
-    # Setup kubectl
+    # 13. Install kubectl
     # -------------------
     - name: Install kubectl
       uses: azure/setup-kubectl@v4
 
     # -------------------
-    # Set kubeconfig (FIX مهم)
+    # 14. Set kubeconfig
     # -------------------
     - name: Set Kubeconfig
       run: |
+        mkdir -p $HOME/.kube
         echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
 
     # -------------------
-    # Deploy
+    # 15. Deploy to Kubernetes
     # -------------------
     - name: Deploy to K8s
       run: kubectl apply -f deployment.yaml
